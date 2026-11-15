@@ -135,6 +135,12 @@ example.com  —  SPF unknown  DMARC unknown
                 fine; try again, or use --doh to bypass the local resolver.
 ```
 
+A domain in that state gets no grade at all. It shows as `unchecked`, and
+the columns below DNS show `-` rather than a result nothing established — an
+A for a domain nothing is known about is worse than no answer, because it
+looks like one. A domain that really does not exist in DNS scores 0 and is
+spared the advice about publishing SPF records for a name that isn't there.
+
 This is also why `--doh` exists. Local resolvers rate limit, filter, and are
 sometimes simply unreliable for particular zones, and a sweep of hundreds of
 domains is exactly the load that provokes it.
