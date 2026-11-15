@@ -121,6 +121,33 @@ v=spf1 include:_spf.google.com include:sendgrid.net include:servers.mcsv.net -al
 `domsweep` follows every `include:` and `redirect=` and reports the real
 total, so `3/10` or `12/10` tells you whether you can add another sender.
 
+## A failed lookup is not a missing record
+
+If a resolver times out and the scanner returns an empty list, "nothing came
+back" turns into "you have no SPF record" — and you go and fix a problem you
+never had. domsweep keeps the two apart. A lookup that does not complete is
+reported as unknown, at info level, and nothing downstream is inferred from
+it:
+
+```
+example.com  —  SPF unknown  DMARC unknown
+  warning [dns] DNS lookups did not complete (EAI_AGAIN). The domain may be
+                fine; try again, or use --doh to bypass the local resolver.
+```
+
+This is also why `--doh` exists. Local resolvers rate limit, filter, and are
+sometimes simply unreliable for particular zones, and a sweep of hundreds of
+domains is exactly the load that provokes it.
+
+## Parked domains
+
+In a portfolio of any size most domains are registered and pointed nowhere.
+They are still spoofable, so a missing SPF or DMARC is worth knowing about,
+but it is not the same emergency as an unprotected mailbox domain. domsweep
+reports those as warnings rather than criticals, with wording that says what
+to publish, and it skips DKIM probing on them entirely — which also keeps 42
+DNS queries per domain off your resolver.
+
 ## Options
 
 ```
@@ -174,11 +201,23 @@ replaced too, so you can test code that uses `domsweep` without a network:
 ```js
 import { sweepDomain } from 'domsweep';
 
+const reply = (records) => ({ records, error: null, nxdomain: false });
+
 const result = await sweepDomain('example.com', {
-  resolver: { txt: async () => ['v=spf1 -all'], mx: async () => [], a: async () => ['1.2.3.4'], aaaa: async () => [], ns: async () => ['ns1.example.com'], cname: async () => [] },
+  resolver: {
+    a: async () => reply(['1.2.3.4']),
+    aaaa: async () => reply([]),
+    ns: async () => reply(['ns1.example.com']),
+    mx: async () => reply([]),
+    txt: async () => reply(['v=spf1 -all']),
+    cname: async () => reply([]),
+  },
   skip: ['ssl', 'rdap'],
 });
 ```
+
+Every resolver method returns `{ records, error, nxdomain }`. The three are
+kept apart on purpose: see below.
 
 ## Install
 
@@ -197,8 +236,10 @@ Node 18.17 or newer. No dependencies.
   match from the common list, pass `--dkim-selectors`.
 - It reads one TLS certificate on port 443. It is not a full TLS configuration
   audit: use [testssl.sh](https://testssl.sh) for cipher suites and protocols.
-- Some TLDs do not publish RDAP, and those show as `rdap_unavailable` rather
-  than a problem with your domain.
+- Many ccTLDs publish no RDAP at all, so no expiry date is available for
+  them. domsweep checks the IANA bootstrap list before deciding, so an
+  unsupported TLD reads as `rdap_not_supported` rather than being mistaken
+  for an unregistered domain.
 - It is a point-in-time check, not a monitor. Run it on a schedule.
 
 ## Contributing
