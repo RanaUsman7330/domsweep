@@ -1,0 +1,20 @@
+{
+  "name": "domsweep",
+  "version": "0.1.0",
+  "description": "Sweep a whole domain portfolio for DNS, email-authentication, SSL and expiry problems. One command, hundreds of domains, zero dependencies.",
+  "keywords": ["dns","spf","dkim","dmarc","ssl","tls","rdap","whois","domain","email-authentication","bulk","cli","devops","sysadmin"],
+  "license": "MIT",
+  "author": "Rana Usman (https://mrusman.com)",
+  "homepage": "https://github.com/RanaUsman7330/domsweep#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/RanaUsman7330/domsweep.git" },
+  "bugs": { "url": "https://github.com/RanaUsman7330/domsweep/issues" },
+  "type": "module",
+  "bin": { "domsweep": "bin/domsweep.js" },
+  "exports": { ".": "./src/index.js" },
+  "files": ["bin","src","README.md","LICENSE"],
+  "engines": { "node": ">=18.17" },
+  "scripts": {
+    "test": "node --test",
+    "demo": "node bin/domsweep.js --demo"
+  }
+}
