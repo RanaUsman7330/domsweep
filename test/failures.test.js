@@ -131,3 +131,39 @@ test('an unreachable certificate is not reported when DNS never resolved', async
   assert.ok(!codes(r).includes('tls_unreachable'));
   assert.ok(codes(r).includes('dns_lookup_failed'));
 });
+
+// --- an unknown is not an A ----------------------------------------------
+
+test('a domain whose lookups failed is not graded', async () => {
+  // Reporting 92/A for a domain nothing is known about is worse than
+  // reporting nothing, because it looks like an answer.
+  const r = await sweepDomain('example.com', { resolver: brokenResolver(), skip: ['ssl', 'rdap'] });
+  assert.equal(r.score, null);
+  assert.equal(r.grade, '?');
+  assert.equal(r.checked, false);
+});
+
+test('a domain that does not exist scores zero', async () => {
+  const nx = async () => ({ records: [], error: null, nxdomain: true });
+  const resolver = { name: 'nx', a: nx, aaaa: nx, ns: nx, mx: nx, txt: nx, cname: nx };
+  const r = await sweepDomain('gone.example', { resolver, skip: ['ssl', 'rdap'] });
+  assert.equal(r.score, 0);
+  assert.equal(r.grade, 'F');
+});
+
+test('a domain that does not exist gets no advice about SPF', async () => {
+  // "Publish v=spf1 -all" is not something you can act on for a name that
+  // does not exist.
+  const nx = async () => ({ records: [], error: null, nxdomain: true });
+  const resolver = { name: 'nx', a: nx, aaaa: nx, ns: nx, mx: nx, txt: nx, cname: nx };
+  const r = await sweepDomain('gone.example', { resolver, skip: ['ssl', 'rdap'] });
+  assert.deepEqual(codes(r), ['dns_nxdomain']);
+});
+
+test('the table says unchecked rather than inventing a grade', async () => {
+  const { renderTable } = await import('../src/report/table.js');
+  const r = await sweepDomain('example.com', { resolver: brokenResolver(), skip: ['ssl', 'rdap'] });
+  const out = renderTable([r], { colour: false, details: false });
+  assert.match(out, /unchecked/);
+  assert.ok(!/\b92\b/.test(out), 'must not print a score for an unchecked domain');
+});
