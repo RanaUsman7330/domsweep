@@ -76,20 +76,22 @@ export function demoResolver(zones = ZONES) {
     return null;
   };
 
+  const reply = (records) => ({ records, error: null, nxdomain: records.length === 0 });
+
   return {
     name: 'demo',
-    a: async (d) => base(d)?.kind === 'apex' ? base(d).zone.a ?? [] : [],
-    aaaa: async () => [],
-    ns: async (d) => base(d)?.kind === 'apex' ? base(d).zone.ns ?? [] : [],
-    mx: async (d) => base(d)?.kind === 'apex' ? base(d).zone.mx ?? [] : [],
-    cname: async () => [],
+    a: async (d) => reply(base(d)?.kind === 'apex' ? base(d).zone.a ?? [] : []),
+    aaaa: async () => reply([]),
+    ns: async (d) => reply(base(d)?.kind === 'apex' ? base(d).zone.ns ?? [] : []),
+    mx: async (d) => reply(base(d)?.kind === 'apex' ? base(d).zone.mx ?? [] : []),
+    cname: async () => reply([]),
     txt: async (d) => {
       const hit = base(d);
-      if (!hit) return [];
-      if (hit.kind === 'apex') return hit.zone.txt ?? [];
-      if (hit.kind === 'dmarc') return hit.zone._dmarc ?? [];
+      if (!hit) return reply([]);
+      if (hit.kind === 'apex') return reply(hit.zone.txt ?? []);
+      if (hit.kind === 'dmarc') return reply(hit.zone._dmarc ?? []);
       const key = hit.zone.dkim?.[hit.selector];
-      return key ? [key] : [];
+      return reply(key ? [key] : []);
     },
   };
 }
@@ -114,7 +116,7 @@ const stubSsl = (domain, { now = DEMO_NOW } = {}) => {
 
 const stubRdap = (domain, { now = DEMO_NOW } = {}) => {
   const r = RDAP[domain];
-  if (!r) return Promise.resolve(evaluateRdap({ ok: false, error: 'not_registered' }, now));
+  if (!r) return Promise.resolve(evaluateRdap({ ok: false, error: 'not_found' }, { now, tldSupported: true }));
   return Promise.resolve(evaluateRdap({
     ok: true,
     data: {
@@ -125,7 +127,7 @@ const stubRdap = (domain, { now = DEMO_NOW } = {}) => {
       status: r.locked ? ['client transfer prohibited'] : ['active'],
       entities: [{ roles: ['registrar'], vcardArray: ['vcard', [['fn', {}, 'text', r.registrar]]] }],
     },
-  }, now));
+  }, { now }));
 };
 
 export function demoOptions(zones = ZONES) {

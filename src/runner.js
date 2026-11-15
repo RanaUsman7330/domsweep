@@ -40,10 +40,15 @@ export async function sweepDomain(domain, options = {}) {
     run('rdap', () => rdapCheck(domain, { now, timeout: rdapTimeout })),
   ]);
 
+  // When DNS did not answer, everything downstream fails for the same single
+  // reason. Repeating it as four findings turns one unknown into a panic.
+  const dnsUnresolved = Boolean(dns?.lookupFailed || dns?.nxdomain);
+  const consequential = new Set(['tls_unreachable', 'tls_no_certificate']);
+
   const issues = [
     ...(dns?.issues ?? []).map((i) => ({ ...i, area: 'dns' })),
     ...(email?.issues ?? []).map((i) => ({ ...i, area: 'email' })),
-    ...(ssl?.issues ?? []).map((i) => ({ ...i, area: 'ssl' })),
+    ...(ssl?.issues ?? []).filter((i) => !(dnsUnresolved && consequential.has(i.code))).map((i) => ({ ...i, area: 'ssl' })),
     ...(rdap?.issues ?? []).map((i) => ({ ...i, area: 'domain' })),
   ];
 
