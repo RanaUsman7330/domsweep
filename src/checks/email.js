@@ -1,6 +1,5 @@
-import { evaluateSpf } from '../parse/spf.js';
-import { evaluateDmarc, } from '../parse/dmarc.js';
-import { findSpfRecords, parseSpf } from '../parse/spf.js';
+import { evaluateSpf, findSpfRecords, parseSpf } from '../parse/spf.js';
+import { evaluateDmarc } from '../parse/dmarc.js';
 
 /**
  * Selectors worth probing when no selector is configured. A DKIM key lives at
@@ -50,7 +49,10 @@ export async function countSpfLookups(domain, resolver, { maxDepth = 10 } = {}) 
     if (seen.has(name)) return; // a loop costs lookups but must not hang us
     seen.add(name);
 
-    const records = findSpfRecords(await resolver.txt(name));
+    const { records: txt, error } = await resolver.txt(name);
+    if (error) return;
+
+    const records = findSpfRecords(txt);
     if (records.length !== 1) return;
 
     const parsed = parseSpf(records[0]);
@@ -71,30 +73,59 @@ export async function probeDkim(domain, resolver, selectors = COMMON_DKIM_SELECT
   await Promise.all(selectors.map(async (sel) => {
     const name = `${sel}._domainkey.${domain}`;
     const [txt, cname] = await Promise.all([resolver.txt(name), resolver.cname(name)]);
-    const record = txt.find((r) => /v=DKIM1|k=rsa|p=/i.test(r));
+    const record = txt.records.find((r) => /v=DKIM1|k=rsa|p=/i.test(r));
     if (record) found.push({ selector: sel, via: 'txt', record });
-    else if (cname.length) found.push({ selector: sel, via: 'cname', target: cname[0] });
+    else if (cname.records.length) found.push({ selector: sel, via: 'cname', target: cname.records[0] });
   }));
   return found.sort((a, b) => a.selector.localeCompare(b.selector));
 }
 
-export async function checkEmail(domain, resolver, { dkimSelectors } = {}) {
-  const [mx, txt, dmarcTxt, lookupInfo, dkim] = await Promise.all([
+/**
+ * A domain that receives no mail is still spoofable, so SPF and DMARC are
+ * worth publishing on it. It is not an emergency the way an unprotected
+ * mailbox domain is, and treating the two the same buries the real problems
+ * in a portfolio where most domains are parked.
+ */
+function adjustForNoMail(issues) {
+  return issues.map((issue) => {
+    if (issue.code === 'spf_missing') {
+      return { ...issue, level: 'warning', message: 'No SPF record. The domain receives no mail, but it can still be spoofed; publish "v=spf1 -all".' };
+    }
+    if (issue.code === 'dmarc_missing') {
+      return { ...issue, level: 'warning', message: 'No DMARC record. The domain receives no mail, but it can still be spoofed; publish "v=DMARC1; p=reject".' };
+    }
+    return issue;
+  });
+}
+
+export async function checkEmail(domain, resolver, { dkimSelectors, skipIfNoMail = true } = {}) {
+  const [mx, txt, dmarcTxt] = await Promise.all([
     resolver.mx(domain),
     resolver.txt(domain),
     resolver.txt(`_dmarc.${domain}`),
-    countSpfLookups(domain, resolver),
-    probeDkim(domain, resolver, dkimSelectors),
   ]);
 
-  const spf = evaluateSpf(txt, { totalLookups: lookupInfo.total || null });
-  const dmarc = evaluateDmarc(dmarcTxt);
-  const exchanges = mx.map((m) => m.exchange);
-  const issues = [...spf.issues, ...dmarc.issues];
-
+  const exchanges = mx.records.map((m) => m.exchange);
   const hasMail = exchanges.length > 0;
-  if (!hasMail) {
+
+  // Probing 21 selectors costs 42 DNS queries. On a parked domain that is
+  // wasted load, and across a large portfolio it is enough to make a resolver
+  // start dropping answers.
+  const [lookupInfo, dkim] = await Promise.all([
+    txt.error ? Promise.resolve({ total: 0, truncated: false, visited: 0 }) : countSpfLookups(domain, resolver),
+    hasMail || !skipIfNoMail ? probeDkim(domain, resolver, dkimSelectors) : Promise.resolve([]),
+  ]);
+
+  const spf = evaluateSpf(txt.records, { totalLookups: lookupInfo.total || null, lookupError: txt.error });
+  const dmarc = evaluateDmarc(dmarcTxt.records, { lookupError: dmarcTxt.error });
+
+  let issues = [...spf.issues, ...dmarc.issues];
+
+  if (mx.error) {
+    issues.push({ level: 'info', code: 'mx_lookup_failed', message: `MX lookup did not complete (${mx.error}).` });
+  } else if (!hasMail) {
     issues.push({ level: 'info', code: 'mx_missing', message: 'No MX records, so this domain does not receive mail.' });
+    issues = adjustForNoMail(issues);
   }
 
   if (hasMail && dkim.length === 0) {
@@ -107,10 +138,12 @@ export async function checkEmail(domain, resolver, { dkimSelectors } = {}) {
 
   return {
     mx: exchanges,
+    hasMail,
     provider: detectProvider(exchanges),
     spf,
     dmarc,
     dkim,
+    dkimProbed: hasMail || !skipIfNoMail,
     spfLookups: lookupInfo,
     issues,
   };
