@@ -66,7 +66,16 @@ export function parseSpf(record) {
  * `totalLookups` is supplied by the recursive walker when available; without
  * it the count covers only the top-level record.
  */
-export function evaluateSpf(txtRecords, { totalLookups = null } = {}) {
+export function evaluateSpf(txtRecords, { totalLookups = null, lookupError = null } = {}) {
+  if (lookupError) {
+    // The TXT lookup did not complete, so we know nothing about SPF. Claiming
+    // it is missing would be worse than saying nothing.
+    return {
+      present: null,
+      issues: [{ level: 'info', code: 'spf_unknown', message: `SPF could not be checked: the TXT lookup did not complete (${lookupError}).` }],
+    };
+  }
+
   const records = findSpfRecords(txtRecords);
 
   if (records.length === 0) {

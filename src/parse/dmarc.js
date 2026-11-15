@@ -16,7 +16,15 @@ export function parseDmarc(record) {
   return tags;
 }
 
-export function evaluateDmarc(txtRecords) {
+export function evaluateDmarc(txtRecords, { lookupError = null } = {}) {
+  if (lookupError) {
+    return {
+      present: null,
+      policy: null,
+      issues: [{ level: 'info', code: 'dmarc_unknown', message: `DMARC could not be checked: the TXT lookup did not complete (${lookupError}).` }],
+    };
+  }
+
   const records = findDmarcRecords(txtRecords);
 
   if (records.length === 0) {
