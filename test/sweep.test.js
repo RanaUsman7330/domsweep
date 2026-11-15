@@ -80,7 +80,7 @@ test('a sweep returns one result per domain in order', async () => {
 test('an unknown domain degrades gracefully instead of throwing', async () => {
   const r = await sweepDomain('not-in-fixtures.example', demoOptions());
   assert.equal(r.domain, 'not-in-fixtures.example');
-  assert.ok(r.issues.some((i) => i.code === 'dns_no_address'));
+  assert.ok(r.issues.some((i) => i.code === 'dns_nxdomain'));
 });
 
 // --- reports --------------------------------------------------------------

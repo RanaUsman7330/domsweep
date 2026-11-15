@@ -68,7 +68,7 @@ test('deprecated ptr is reported', () => {
 // --- recursive lookup counting -------------------------------------------
 
 function fakeResolver(zones) {
-  return { txt: async (name) => zones[name] ?? [] };
+  return { txt: async (name) => ({ records: zones[name] ?? [], error: null, nxdomain: !zones[name] }) };
 }
 
 test('counts lookups through nested includes', async () => {
