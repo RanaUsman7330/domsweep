@@ -5,7 +5,8 @@ const esc = (v) => String(v ?? '')
 const days = (n) => (n === null || n === undefined ? '—' : n < 0 ? 'expired' : `${n} days`);
 
 export function renderHtml(results, { title = 'Domain health report', generatedAt = new Date() } = {}) {
-  const rows = [...results].sort((a, b) => a.score - b.score || a.domain.localeCompare(b.domain));
+  const rank = (r) => (r.score === null || r.score === undefined ? Infinity : r.score);
+  const rows = [...results].sort((a, b) => rank(a) - rank(b) || a.domain.localeCompare(b.domain));
   const totals = results.reduce((acc, r) => { acc[r.level] = (acc[r.level] ?? 0) + 1; return acc; }, {});
 
   const cards = rows.map((r) => {
@@ -13,7 +14,9 @@ export function renderHtml(results, { title = 'Domain health report', generatedA
     return `<article class="card ${esc(r.level)}">
   <header>
     <h2>${esc(r.domain)}</h2>
-    <span class="score" aria-label="score">${r.score}<small>/100</small> <b>${esc(r.grade)}</b></span>
+    <span class="score" aria-label="score">${r.score === null || r.score === undefined
+      ? 'not checked'
+      : `${r.score}<small>/100</small> <b>${esc(r.grade)}</b>`}</span>
   </header>
   <dl>
     <div><dt>SPF</dt><dd>${r.email ? (r.email.spf.present ? `${esc(r.email.spf.parsed?.all?.raw ?? 'present')} · ${r.email.spfLookups?.total ?? 0}/10 lookups` : 'missing') : '—'}</dd></div>

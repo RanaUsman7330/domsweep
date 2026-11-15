@@ -7,8 +7,8 @@ function days(n) {
   return n < 0 ? 'expired' : `${n}d`;
 }
 
-function spfCell(email) {
-  if (!email) return dash;
+function spfCell(email, unresolved) {
+  if (!email || unresolved) return dash;
   if (email.spf.present === null) return 'unknown';
   if (!email.spf.present) return 'missing';
   // More than one SPF record is a permerror, so there is no policy to show.
@@ -19,8 +19,8 @@ function spfCell(email) {
   return lookups ? `${label} (${lookups}/10)` : label;
 }
 
-function dmarcCell(email) {
-  if (!email) return dash;
+function dmarcCell(email, unresolved) {
+  if (!email || unresolved) return dash;
   if (email.dmarc.present === null) return 'unknown';
   if (!email.dmarc.present) return 'missing';
   return `p=${email.dmarc.policy ?? '?'}`;
@@ -34,18 +34,25 @@ function levelColour(colour, level) {
 
 export function renderTable(results, { colour: useColour = true, details = true } = {}) {
   const c = createColour(useColour);
-  const rows = [...results].sort((a, b) => a.score - b.score || a.domain.localeCompare(b.domain));
+  // Ungraded domains sort last: they are not known to be bad, only unknown.
+  const rank = (r) => (r.score === null || r.score === undefined ? Infinity : r.score);
+  const rows = [...results].sort((a, b) => rank(a) - rank(b) || a.domain.localeCompare(b.domain));
 
   const header = ['DOMAIN', 'SCORE', 'SPF', 'DMARC', 'DKIM', 'SSL', 'EXPIRES'];
-  const body = rows.map((r) => [
-    r.domain,
-    `${r.score} ${r.grade}`,
-    spfCell(r.email),
-    dmarcCell(r.email),
-    r.email ? (r.email.dkim.length ? `${r.email.dkim.length} found` : (r.email.dkimProbed ? 'none' : 'n/a')) : dash,
-    r.ssl ? (r.ssl.reachable ? days(r.ssl.daysLeft) : 'unreachable') : dash,
-    r.rdap ? (r.rdap.daysLeft === null || r.rdap.daysLeft === undefined ? 'n/a' : days(r.rdap.daysLeft)) : dash,
-  ]);
+  const body = rows.map((r) => {
+    // With no usable DNS answer nothing below it was really tested, so the
+    // columns say so rather than showing a result they did not establish.
+    const unresolved = Boolean(r.dns?.nxdomain || r.dns?.lookupFailed);
+    return [
+      r.domain,
+      r.score === null || r.score === undefined ? 'unchecked' : `${r.score} ${r.grade}`,
+      spfCell(r.email, unresolved),
+      dmarcCell(r.email, unresolved),
+      r.email && !unresolved ? (r.email.dkim.length ? `${r.email.dkim.length} found` : (r.email.dkimProbed ? 'none' : 'n/a')) : dash,
+      r.ssl && !unresolved ? (r.ssl.reachable ? days(r.ssl.daysLeft) : 'unreachable') : dash,
+      r.rdap ? (r.rdap.daysLeft === null || r.rdap.daysLeft === undefined ? 'n/a' : days(r.rdap.daysLeft)) : dash,
+    ];
+  });
 
   const widths = header.map((h, i) => Math.max(width(h), ...body.map((row) => width(row[i]))));
 
@@ -66,7 +73,8 @@ export function renderTable(results, { colour: useColour = true, details = true 
       lines.push(c.bold('Findings'));
       for (const r of withIssues) {
         lines.push('');
-        lines.push(`${c.bold(r.domain)} ${c.grey(`(${r.score}/100)`)}`);
+        const label = r.score === null || r.score === undefined ? 'not checked' : `${r.score}/100`;
+        lines.push(`${c.bold(r.domain)} ${c.grey(`(${label})`)}`);
         for (const issue of r.issues) {
           if (issue.level === 'info') continue;
           const tag = issue.level === 'critical' ? c.red('critical') : c.yellow('warning ');
@@ -81,12 +89,15 @@ export function renderTable(results, { colour: useColour = true, details = true 
     return acc;
   }, {});
 
+  const unchecked = results.filter((r) => r.score === null || r.score === undefined).length;
+
   lines.push('');
   lines.push([
     `${results.length} domains`,
     c.red(`${totals.critical ?? 0} critical`),
     c.yellow(`${totals.warning ?? 0} warning`),
     c.green(`${totals.ok ?? 0} clean`),
+    ...(unchecked ? [c.grey(`${unchecked} unchecked`)] : []),
   ].join('  ·  '));
 
   return lines.join('\n');
