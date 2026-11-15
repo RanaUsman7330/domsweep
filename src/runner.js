@@ -40,24 +40,42 @@ export async function sweepDomain(domain, options = {}) {
     run('rdap', () => rdapCheck(domain, { now, timeout: rdapTimeout })),
   ]);
 
-  // When DNS did not answer, everything downstream fails for the same single
-  // reason. Repeating it as four findings turns one unknown into a panic.
-  const dnsUnresolved = Boolean(dns?.lookupFailed || dns?.nxdomain);
+  // Everything below DNS depends on DNS. When it did not answer, the same
+  // single cause would otherwise be restated as four separate problems.
+  const nxdomain = Boolean(dns?.nxdomain);
+  const lookupFailed = Boolean(dns?.lookupFailed);
   const consequential = new Set(['tls_unreachable', 'tls_no_certificate']);
+
+  // "Publish v=spf1 -all" is not advice you can act on for a name that does
+  // not exist. Registration still is: it says whether the name is gone.
+  const emailIssues = nxdomain ? [] : (email?.issues ?? []);
+  const sslIssues = (ssl?.issues ?? []).filter(
+    (i) => !((nxdomain || lookupFailed) && consequential.has(i.code)),
+  );
 
   const issues = [
     ...(dns?.issues ?? []).map((i) => ({ ...i, area: 'dns' })),
-    ...(email?.issues ?? []).map((i) => ({ ...i, area: 'email' })),
-    ...(ssl?.issues ?? []).filter((i) => !(dnsUnresolved && consequential.has(i.code))).map((i) => ({ ...i, area: 'ssl' })),
+    ...emailIssues.map((i) => ({ ...i, area: 'email' })),
+    ...(nxdomain ? [] : sslIssues).map((i) => ({ ...i, area: 'ssl' })),
     ...(rdap?.issues ?? []).map((i) => ({ ...i, area: 'domain' })),
   ];
 
-  const { score, counts } = scoreIssues(issues);
+  const { counts } = scoreIssues(issues);
+
+  // A domain that does not resolve is as broken as a domain gets, whatever
+  // else did or did not get checked. A domain whose lookups never completed
+  // is not graded at all: an A for a domain nothing is known about is worse
+  // than no answer, because it looks like an answer.
+  let score;
+  if (nxdomain) score = 0;
+  else if (lookupFailed) score = null;
+  else score = scoreIssues(issues).score;
 
   return {
     domain,
     score,
     grade: grade(score),
+    checked: !lookupFailed,
     level: worstLevel(issues),
     counts,
     dns,

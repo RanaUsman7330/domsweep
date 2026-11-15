@@ -19,6 +19,9 @@ export function scoreIssues(issues = []) {
 }
 
 export function grade(score) {
+  // A domain whose checks did not complete has no grade. Scoring it anyway
+  // would hand out an A for a domain nothing is known about.
+  if (score === null || score === undefined) return '?';
   if (score >= 90) return 'A';
   if (score >= 75) return 'B';
   if (score >= 60) return 'C';
