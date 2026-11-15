@@ -9,6 +9,7 @@ function days(n) {
 
 function spfCell(email) {
   if (!email) return dash;
+  if (email.spf.present === null) return 'unknown';
   if (!email.spf.present) return 'missing';
   // More than one SPF record is a permerror, so there is no policy to show.
   if (!email.spf.parsed) return `${email.spf.records?.length ?? 2} records`;
@@ -20,6 +21,7 @@ function spfCell(email) {
 
 function dmarcCell(email) {
   if (!email) return dash;
+  if (email.dmarc.present === null) return 'unknown';
   if (!email.dmarc.present) return 'missing';
   return `p=${email.dmarc.policy ?? '?'}`;
 }
@@ -40,7 +42,7 @@ export function renderTable(results, { colour: useColour = true, details = true 
     `${r.score} ${r.grade}`,
     spfCell(r.email),
     dmarcCell(r.email),
-    r.email ? (r.email.dkim.length ? `${r.email.dkim.length} found` : 'none') : dash,
+    r.email ? (r.email.dkim.length ? `${r.email.dkim.length} found` : (r.email.dkimProbed ? 'none' : 'n/a')) : dash,
     r.ssl ? (r.ssl.reachable ? days(r.ssl.daysLeft) : 'unreachable') : dash,
     r.rdap ? (r.rdap.daysLeft === null || r.rdap.daysLeft === undefined ? 'n/a' : days(r.rdap.daysLeft)) : dash,
   ]);
