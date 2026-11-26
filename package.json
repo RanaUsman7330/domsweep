@@ -1,6 +1,6 @@
 {
   "name": "domsweep",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sweep a whole domain portfolio for DNS, email-authentication, SSL and expiry problems. One command, hundreds of domains, zero dependencies.",
   "keywords": ["dns","spf","dkim","dmarc","ssl","tls","rdap","whois","domain","email-authentication","bulk","cli","devops","sysadmin"],
   "license": "MIT",

@@ -10,7 +10,7 @@ import { renderCsv } from '../src/report/csv.js';
 import { renderHtml } from '../src/report/html.js';
 import { demoResults } from '../src/demo.js';
 
-const VERSION = '0.1.0';
+const VERSION = '0.1.1';
 
 const HELP = `
 domsweep ${VERSION} — sweep a domain portfolio for DNS, email and SSL problems

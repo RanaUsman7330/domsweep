@@ -11,14 +11,15 @@ No dependencies, no account, no API key. It only reads: DNS queries, one TLS
 handshake and public registration data. It never changes anything.
 
 ```bash
-git clone https://github.com/RanaUsman7330/domsweep.git
-cd domsweep
-node bin/domsweep.js example.com
+npx domsweep example.com
 ```
 
-Not on npm yet, so `npx domsweep` does not work — clone it for now. The
-examples below use `domsweep` for readability; run them as
-`node bin/domsweep.js` until it is published.
+Or install it once and use the `domsweep` command anywhere:
+
+```bash
+npm install -g domsweep
+domsweep example.com
+```
 
 ## What it reports
 
@@ -253,20 +254,23 @@ kept apart on purpose: see below.
 
 ## Install
 
-Not published to npm yet. Clone it and run it directly, or link it to get a
-`domsweep` command on your path:
+```bash
+npx domsweep --help           # run it without installing
+npm install -g domsweep       # or put `domsweep` on your path
+```
+
+To use it as a library:
+
+```bash
+npm install domsweep
+```
+
+To run from a clone instead:
 
 ```bash
 git clone https://github.com/RanaUsman7330/domsweep.git
 cd domsweep
-node bin/domsweep.js --help   # run it in place
-npm link                      # or put `domsweep` on your path
-```
-
-To use it as a library, point your dependency at the repository:
-
-```bash
-npm install github:RanaUsman7330/domsweep
+node bin/domsweep.js --help
 ```
 
 Node 18.17 or newer. No dependencies.
