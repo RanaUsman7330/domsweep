@@ -131,7 +131,15 @@ const stubRdap = (domain, { now = DEMO_NOW } = {}) => {
 };
 
 export function demoOptions(zones = ZONES) {
-  return { resolver: demoResolver(zones), now: DEMO_NOW, sslCheck: stubSsl, rdapCheck: stubRdap };
+  return {
+    resolver: demoResolver(zones),
+    // The demo runs entirely offline, so the second opinion comes from the
+    // same fixtures; in a real sweep it is an independent resolver.
+    confirmResolver: demoResolver(zones),
+    now: DEMO_NOW,
+    sslCheck: stubSsl,
+    rdapCheck: stubRdap,
+  };
 }
 
 export async function demoResults() {

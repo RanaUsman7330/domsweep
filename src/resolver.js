@@ -110,3 +110,14 @@ export function dohResolver({ endpoint = 'https://cloudflare-dns.com/dns-query',
 export function createResolver(options = {}) {
   return options.doh ? dohResolver(options) : systemResolver(options);
 }
+
+/**
+ * A resolver of the other kind, for second-guessing a negative. Two
+ * resolvers that share a cache and a network path are not independent, so
+ * the system resolver is checked against DoH and DoH against the system.
+ */
+export function confirmResolverFor(options = {}) {
+  return options.doh
+    ? systemResolver({ timeout: options.timeout })
+    : dohResolver({ timeout: options.timeout });
+}

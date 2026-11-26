@@ -23,7 +23,7 @@ export async function pool(items, limit, task) {
 
 export async function sweepDomain(domain, options = {}) {
   const {
-    resolver, skip = [], expectNs, dkimSelectors, now, sslTimeout, rdapTimeout,
+    resolver, confirmResolver = null, skip = [], expectNs, dkimSelectors, now, sslTimeout, rdapTimeout,
     // The TLS and RDAP checks reach the network directly rather than through
     // the resolver, so they are injectable too. That is what makes the whole
     // pipeline testable offline.
@@ -34,7 +34,7 @@ export async function sweepDomain(domain, options = {}) {
   const run = (name, fn) => (skip.includes(name) ? Promise.resolve(null) : fn());
 
   const [dns, email, ssl, rdap] = await Promise.all([
-    run('dns', () => checkDns(domain, resolver, { expectNs })),
+    run('dns', () => checkDns(domain, resolver, { expectNs, confirm: confirmResolver })),
     run('email', () => checkEmail(domain, resolver, { dkimSelectors })),
     run('ssl', () => sslCheck(domain, { now, timeout: sslTimeout })),
     run('rdap', () => rdapCheck(domain, { now, timeout: rdapTimeout })),
@@ -42,8 +42,10 @@ export async function sweepDomain(domain, options = {}) {
 
   // Everything below DNS depends on DNS. When it did not answer, the same
   // single cause would otherwise be restated as four separate problems.
-  const nxdomain = Boolean(dns?.nxdomain);
-  const lookupFailed = Boolean(dns?.lookupFailed);
+  // A confirmed missing name is a fact to act on. An unconfirmed one, or a
+  // resolver caught contradicting a second, leaves us knowing nothing.
+  const nxdomain = Boolean(dns?.nxdomain && dns?.nxdomainConfirmed);
+  const lookupFailed = Boolean(dns?.lookupFailed || dns?.unreliable || (dns?.nxdomain && !dns?.nxdomainConfirmed));
   const consequential = new Set(['tls_unreachable', 'tls_no_certificate']);
 
   // "Publish v=spf1 -all" is not advice you can act on for a name that does

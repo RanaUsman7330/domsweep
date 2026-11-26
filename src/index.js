@@ -1,5 +1,5 @@
 export { sweep, sweepDomain, pool } from './runner.js';
-export { createResolver, systemResolver, dohResolver } from './resolver.js';
+export { createResolver, confirmResolverFor, systemResolver, dohResolver } from './resolver.js';
 export { checkDns } from './checks/dns.js';
 export { checkEmail, countSpfLookups, probeDkim, COMMON_DKIM_SELECTORS } from './checks/email.js';
 export { checkSsl, evaluateCertificate, fetchCertificate } from './checks/ssl.js';
