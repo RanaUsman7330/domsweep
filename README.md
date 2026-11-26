@@ -135,6 +135,26 @@ example.com  —  SPF unknown  DMARC unknown
                 fine; try again, or use --doh to bypass the local resolver.
 ```
 
+Likewise, "this domain does not exist" is the most alarming thing a sweep can
+say, so domsweep does not say it on one resolver's word — least of all a
+resolver that may be timing out on the neighbouring domains in the same run.
+A name reported as missing is re-checked against an independent resolver
+(DoH when you are using the system one, the system one when you pass
+`--doh`), and only a negative both agree on is reported as a fact. If the
+second resolver cannot be reached you get a warning instead of a critical,
+and if it resolves the name, the finding is about your resolver rather than
+your domain:
+
+```
+actually-fine.example  —  unchecked
+  warning [dns] The system resolver reports this name as non-existent, but a
+                second resolver resolves it. Re-run with --doh; the local
+                resolver is unreliable for this domain.
+```
+
+The second resolver is consulted only for a name that came back missing, so a
+healthy sweep pays nothing for it.
+
 A domain in that state gets no grade at all. It shows as `unchecked`, and
 the columns below DNS show `-` rather than a result nothing established — an
 A for a domain nothing is known about is worse than no answer, because it
