@@ -14,6 +14,12 @@ function brokenResolver(error = 'ETIMEOUT') {
   return { name: 'broken', a: fail, aaaa: fail, ns: fail, mx: fail, txt: fail, cname: fail };
 }
 
+/** A resolver that reports every name as not existing. */
+function nxResolver() {
+  const nx = async () => ({ records: [], error: null, nxdomain: true });
+  return { name: 'nx', a: nx, aaaa: nx, ns: nx, mx: nx, txt: nx, cname: nx };
+}
+
 /** A resolver for a registered, delegated domain that sends and receives nothing. */
 function parkedResolver() {
   const none = async () => ({ records: [], error: null, nxdomain: false });
@@ -68,10 +74,52 @@ test('a domain whose lookups all fail raises no false criticals', async () => {
   assert.ok(!codes(r).includes('dmarc_missing'));
 });
 
-test('an NXDOMAIN is still reported as a real problem', async () => {
-  const nx = async () => ({ records: [], error: null, nxdomain: true });
-  const r = await checkDns('nope.example', { a: nx, aaaa: nx, ns: nx });
+test('an NXDOMAIN confirmed by a second resolver is a real problem', async () => {
+  const r = await checkDns('nope.example', nxResolver(), { confirm: nxResolver() });
   assert.deepEqual(codes(r), ['dns_nxdomain']);
+  assert.equal(r.nxdomainConfirmed, true);
+});
+
+test('an NXDOMAIN no second resolver can confirm is only a warning', async () => {
+  // The resolver that reports a name as missing may be the same one timing
+  // out on its neighbours. "This domain does not exist" is too alarming a
+  // claim to make on one unverified answer.
+  const r = await checkDns('nope.example', nxResolver(), { confirm: brokenResolver() });
+  assert.deepEqual(codes(r), ['dns_nxdomain_unconfirmed']);
+  assert.equal(r.issues[0].level, 'warning');
+  assert.equal(r.nxdomainConfirmed, false);
+});
+
+test('with no second resolver at all, an NXDOMAIN stays a warning', async () => {
+  const r = await checkDns('nope.example', nxResolver());
+  assert.deepEqual(codes(r), ['dns_nxdomain_unconfirmed']);
+});
+
+test('a resolver contradicted by a second one is reported as unreliable', async () => {
+  const live = {
+    name: 'live',
+    a: async () => ({ records: ['203.0.113.9'], error: null, nxdomain: false }),
+    ns: async () => ({ records: ['ns1.example.net'], error: null, nxdomain: false }),
+  };
+  const r = await checkDns('actually-fine.example', nxResolver(), { confirm: live });
+  assert.deepEqual(codes(r), ['dns_resolver_disagreement']);
+  assert.equal(r.unreliable, true);
+  assert.match(r.issues[0].message, /--doh/);
+});
+
+test('an unreliable resolver leaves the domain ungraded', async () => {
+  const live = {
+    name: 'live',
+    a: async () => ({ records: ['203.0.113.9'], error: null, nxdomain: false }),
+    ns: async () => ({ records: ['ns1.example.net'], error: null, nxdomain: false }),
+  };
+  const r = await sweepDomain('actually-fine.example', {
+    resolver: nxResolver(), confirmResolver: live, skip: ['ssl', 'rdap'],
+  });
+  assert.equal(r.score, null);
+  assert.equal(r.grade, '?');
+  // Above all: no critical claiming the domain does not exist.
+  assert.ok(!codes(r).includes('dns_nxdomain'));
 });
 
 // --- parked domains ------------------------------------------------------
@@ -144,9 +192,8 @@ test('a domain whose lookups failed is not graded', async () => {
 });
 
 test('a domain that does not exist scores zero', async () => {
-  const nx = async () => ({ records: [], error: null, nxdomain: true });
-  const resolver = { name: 'nx', a: nx, aaaa: nx, ns: nx, mx: nx, txt: nx, cname: nx };
-  const r = await sweepDomain('gone.example', { resolver, skip: ['ssl', 'rdap'] });
+  const resolver = nxResolver();
+  const r = await sweepDomain('gone.example', { resolver, confirmResolver: nxResolver(), skip: ['ssl', 'rdap'] });
   assert.equal(r.score, 0);
   assert.equal(r.grade, 'F');
 });
@@ -154,9 +201,7 @@ test('a domain that does not exist scores zero', async () => {
 test('a domain that does not exist gets no advice about SPF', async () => {
   // "Publish v=spf1 -all" is not something you can act on for a name that
   // does not exist.
-  const nx = async () => ({ records: [], error: null, nxdomain: true });
-  const resolver = { name: 'nx', a: nx, aaaa: nx, ns: nx, mx: nx, txt: nx, cname: nx };
-  const r = await sweepDomain('gone.example', { resolver, skip: ['ssl', 'rdap'] });
+  const r = await sweepDomain('gone.example', { resolver: nxResolver(), confirmResolver: nxResolver(), skip: ['ssl', 'rdap'] });
   assert.deepEqual(codes(r), ['dns_nxdomain']);
 });
 
