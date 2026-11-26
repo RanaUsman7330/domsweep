@@ -11,8 +11,14 @@ No dependencies, no account, no API key. It only reads: DNS queries, one TLS
 handshake and public registration data. It never changes anything.
 
 ```bash
-npx domsweep example.com
+git clone https://github.com/RanaUsman7330/domsweep.git
+cd domsweep
+node bin/domsweep.js example.com
 ```
+
+Not on npm yet, so `npx domsweep` does not work — clone it for now. The
+examples below use `domsweep` for readability; run them as
+`node bin/domsweep.js` until it is published.
 
 ## What it reports
 
@@ -32,7 +38,7 @@ out of 100 so a long list sorts itself.
 ## Try it without a network call
 
 ```bash
-npx domsweep --demo
+node bin/domsweep.js --demo
 ```
 
 ```
@@ -92,7 +98,7 @@ domsweep -f domains.txt --expect-ns ns1.example-dns.net,ns2.example-dns.net
 you ask it to.
 
 ```yaml
-- run: npx domsweep -f domains.txt --fail-on critical --quiet
+- run: node bin/domsweep.js -f domains.txt --fail-on critical --quiet
 ```
 
 Exit codes: `0` fine, `1` warnings (with `--fail-on warning`), `2` something
@@ -247,10 +253,20 @@ kept apart on purpose: see below.
 
 ## Install
 
+Not published to npm yet. Clone it and run it directly, or link it to get a
+`domsweep` command on your path:
+
 ```bash
-npx domsweep --help      # no install
-npm install -g domsweep  # or install it
-npm install domsweep     # or use it as a library
+git clone https://github.com/RanaUsman7330/domsweep.git
+cd domsweep
+node bin/domsweep.js --help   # run it in place
+npm link                      # or put `domsweep` on your path
+```
+
+To use it as a library, point your dependency at the repository:
+
+```bash
+npm install github:RanaUsman7330/domsweep
 ```
 
 Node 18.17 or newer. No dependencies.
