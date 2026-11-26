@@ -1,5 +1,13 @@
-/** Basic resolution and delegation checks. */
-export async function checkDns(domain, resolver, { expectNs = null } = {}) {
+/**
+ * Basic resolution and delegation checks.
+ *
+ * `confirm` is a second, independent resolver used for one job only: checking
+ * a negative before it is reported as a fact. "This domain does not exist" is
+ * the most alarming thing a sweep can say, and a single resolver — the same
+ * one that may be timing out on its neighbours — is not enough evidence for
+ * it.
+ */
+export async function checkDns(domain, resolver, { expectNs = null, confirm = null } = {}) {
   const [a, aaaa, ns] = await Promise.all([
     resolver.a(domain),
     resolver.aaaa(domain),
@@ -21,10 +29,37 @@ export async function checkDns(domain, resolver, { expectNs = null } = {}) {
     return { a: [], aaaa: [], ns: [], lookupFailed, error: a.error, issues };
   }
 
-  const nxdomain = a.nxdomain && ns.nxdomain;
-  if (nxdomain) {
-    issues.push({ level: 'critical', code: 'dns_nxdomain', message: 'The name does not exist in DNS.' });
-    return { a: [], aaaa: [], ns: [], nxdomain, issues };
+  if (a.nxdomain && ns.nxdomain) {
+    const second = confirm ? await confirmNxdomain(domain, confirm) : 'unavailable';
+
+    if (second === 'agrees') {
+      issues.push({
+        level: 'critical',
+        code: 'dns_nxdomain',
+        message: 'The name does not exist in DNS, confirmed against a second resolver.',
+      });
+      return { a: [], aaaa: [], ns: [], nxdomain: true, nxdomainConfirmed: true, issues };
+    }
+
+    if (second === 'resolves') {
+      // The resolver we were using is wrong about this domain, so nothing
+      // else it told us about it can be trusted either.
+      issues.push({
+        level: 'warning',
+        code: 'dns_resolver_disagreement',
+        message: `The ${resolver.name ?? 'primary'} resolver reports this name as non-existent, but a second resolver resolves it. Re-run with --doh; the local resolver is unreliable for this domain.`,
+      });
+      return { a: [], aaaa: [], ns: [], unreliable: true, issues };
+    }
+
+    // No second opinion available. A single unconfirmed negative is reported,
+    // but not as a fact.
+    issues.push({
+      level: 'warning',
+      code: 'dns_nxdomain_unconfirmed',
+      message: 'One resolver reports this name as non-existent, and it could not be confirmed against a second. Re-run with --doh before acting on it.',
+    });
+    return { a: [], aaaa: [], ns: [], nxdomain: true, nxdomainConfirmed: false, issues };
   }
 
   const addresses = [...a.records, ...aaaa.records];
@@ -64,4 +99,15 @@ export async function checkDns(domain, resolver, { expectNs = null } = {}) {
     parked: addresses.length === 0 && nsSet.length > 0,
     issues,
   };
+}
+
+/** 'agrees' | 'resolves' | 'unavailable' — a second opinion on a missing name. */
+async function confirmNxdomain(domain, confirm) {
+  const [a, ns] = await Promise.all([confirm.a(domain), confirm.ns(domain)]);
+  if (a.error && ns.error) return 'unavailable';
+  if (a.nxdomain && ns.nxdomain) return 'agrees';
+  if (a.records.length || ns.records.length) return 'resolves';
+  // The name exists but holds neither addresses nor delegation at this
+  // resolver. That is not the non-existence we were asked to confirm.
+  return a.nxdomain || ns.nxdomain ? 'unavailable' : 'resolves';
 }
