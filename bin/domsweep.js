@@ -2,7 +2,7 @@
 import { parseArgs } from 'node:util';
 import { readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
-import { createResolver } from '../src/resolver.js';
+import { confirmResolverFor, createResolver } from '../src/resolver.js';
 import { sweep } from '../src/runner.js';
 import { parseDomainList } from '../src/input.js';
 import { renderTable } from '../src/report/table.js';
@@ -134,17 +134,22 @@ async function main() {
 
     const concurrency = Math.max(1, Number(opts.concurrency) || 8);
     const timeout = Math.max(1000, Number(opts.timeout) || 10_000);
-    const resolver = createResolver({
+    const resolverOptions = {
       doh: opts.doh,
       timeout: Math.min(timeout, 8000),
       servers: list(opts.dns) ?? undefined,
-    });
+    };
+    const resolver = createResolver(resolverOptions);
+    // Only ever consulted to double-check a name reported as non-existent,
+    // so it costs nothing on a healthy sweep.
+    const confirmResolver = confirmResolverFor(resolverOptions);
 
     let done = 0;
     const showProgress = !opts.quiet && process.stderr.isTTY;
 
     results = await sweep(domains, {
       resolver,
+      confirmResolver,
       concurrency,
       skip: list(opts.skip) ?? [],
       expectNs: list(opts['expect-ns']),
