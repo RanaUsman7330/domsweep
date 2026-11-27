@@ -275,6 +275,12 @@ node bin/domsweep.js --help
 
 Node 18.17 or newer. No dependencies.
 
+## Pairs with websweep
+
+domsweep checks what sits under a domain. [websweep](https://github.com/RanaUsman7330/websweep) checks what the domain
+actually serves: http and https, www, redirect chains, HSTS and parked pages.
+Run both over the same list.
+
 ## What it does not do
 
 - It does not validate DKIM keys cryptographically, only that one is published.
